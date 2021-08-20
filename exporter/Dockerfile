@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o sdimetrics_exporter .
 #   FROM alpine:3.7
 #   RUN apk --no-cache add ca-certificates
 #
-FROM registry.redhat.io/ubi8-minimal
+FROM quay.io/fedora/fedora:latest
 WORKDIR /root/
 COPY --from=builder /go/src/github.com/miminar/sdimetrics/exporter/sdimetrics_exporter .
 
