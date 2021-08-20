@@ -84,6 +84,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sdimetrics-exporter
     app.kubernetes.io/version: v0.1
+  name: sdimetrics-exporter
 spec:
   clusterIP: None
   ports:
@@ -92,6 +93,6 @@ spec:
       protocol: TCP
       targetPort: metrics
   selector:
-    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/name: sdimetrics-exporter
   sessionAffinity: None
   type: ClusterIP
