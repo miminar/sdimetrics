@@ -4,7 +4,7 @@ with pkgs;
 let
   drv = callPackage ./default.nix { };
 
-  goPackagePath = "github.com/miminar/sdimetrics";
+  goPackagePath = "github.com/miminar/sdimetrics/exporter";
 in
 drv.overrideAttrs (attrs: {
   src = null;

@@ -1,12 +1,15 @@
-FROM docker.io/golang:1.16 AS builder
+FROM registry.access.redhat.com/ubi8/go-toolset:1.15.14 AS builder
 RUN go version
 
 COPY . /go/src/github.com/miminar/sdimetrics/exporter
 WORKDIR /go/src/github.com/miminar/sdimetrics/exporter
+ENV GO111MODULE=on
+ENV GOPATH=/go
+ENV GOCACHE=""
+USER root
 RUN set -x && \
-    export GO111MODULE=on \
-    go mod init \
-    go mod vendor \
+    go mod init github.com/miminar/sdimetrics/exporter; \
+    go mod vendor && \
     go mod verify
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o sdimetrics_exporter .
@@ -18,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o sdimetrics_exporter .
 #   FROM alpine:3.7
 #   RUN apk --no-cache add ca-certificates
 #
-FROM quay.io/fedora/fedora:latest
+FROM registry.access.redhat.com/ubi8-minimal
 WORKDIR /root/
 COPY --from=builder /go/src/github.com/miminar/sdimetrics/exporter/sdimetrics_exporter .
 
