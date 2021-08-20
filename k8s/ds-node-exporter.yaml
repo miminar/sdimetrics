@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/name: sdimetrics
+    app.kubernetes.io/version: v0.1
+  name: sdimetrics-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sdimetrics-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sdimetrics-exporter
+        app.kubernetes.io/version: v0.1
+    spec:
+      containers:
+        - image: quay.io/miminar/sdimetrics:latest
+          imagePullPolicy: IfNotPresent
+          name: node-exporter
+          resources:
+            requests:
+              cpu: 8m
+              memory: 180Mi
+          volumeMounts:
+            - mountPath: /host/proc
+              name: proc
+            - mountPath: /host/sys
+              name: sys
+            - mountPath: /host/root
+              mountPropagation: HostToContainer
+              name: root
+              readOnly: true
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: Always
+      serviceAccount: sdimetrics-exporter
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - hostPath:
+            path: /proc
+            type: ""
+          name: proc
+        - hostPath:
+            path: /sys
+            type: ""
+          name: sys
+        - hostPath:
+            path: /
+            type: ""
+          name: root
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 50%
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sdimetrics-exporter
