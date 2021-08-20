@@ -24,15 +24,11 @@ spec:
               name: metrics
               protocol: TCP
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 2112
-              scheme: HTTP
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 2112
-              scheme: HTTP
           name: node-exporter
           resources:
             requests:
