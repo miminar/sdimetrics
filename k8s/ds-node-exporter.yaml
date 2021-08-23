@@ -34,6 +34,11 @@ spec:
             requests:
               cpu: 8m
               memory: 180Mi
+            limits:
+              memory: 500Mi
+          securityContext:
+            privileged: true
+            runAsUser: 0
           volumeMounts:
             - mountPath: /host/proc
               name: proc
