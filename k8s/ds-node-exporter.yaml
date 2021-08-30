@@ -17,7 +17,7 @@ spec:
         app.kubernetes.io/version: v0.1
     spec:
       containers:
-        - image: quay.io/miminar/sdimetrics:latest
+        - image: quay.io/miminar/sdimetrics@sha256:50fa42910a85033079399bb4dcd7bb91dad6ca07f94fb234196676b10ca1a6df
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 2112
