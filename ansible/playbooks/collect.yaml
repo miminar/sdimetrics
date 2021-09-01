@@ -1,0 +1,6 @@
+- name: Deploy sdimetrics collector
+  hosts: localhost
+  collections:
+    - community.kubernetes
+  roles:
+    - collect

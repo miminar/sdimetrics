@@ -1,0 +1,9 @@
+user_workload_namespace: openshift-user-workload-monitoring 
+collector_namespace: open-cluster-management-addon-observability
+match_user_metrics:
+ - node_latest_pid_count
+ - node_latest_pid
+ - node_max_pids
+ - node_pid_overflow_count
+ - node_zombies
+ - node_zombies_eval_failed

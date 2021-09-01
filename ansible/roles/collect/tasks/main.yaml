@@ -1,0 +1,181 @@
+- name: Get prometheus user workload statefulset spec
+  k8s_info:
+    api_version: apps/v1
+    kind: StatefulSet
+    namespace: "{{ vars.user_workload_namespace }}"
+    name: prometheus-user-workload
+  register: sts_prom
+
+- name: Get prometheus user workload service spec
+  k8s_info:
+    api_version: v1
+    kind: Service
+    namespace: "{{ vars.user_workload_namespace }}"
+    name: prometheus-user-workload
+  register: svc_prom
+
+- name: Get observatorium metrics collector deployment
+  k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ vars.collector_namespace }}"
+    name: metrics-collector-deployment
+  register: deploy_collector
+
+- name: Prepare federated prometheus service
+  command:
+    argv:
+      - jq
+      - --arg
+      - nm
+      - "{{ vars.user_workload_namespace }}"
+      - >
+        del(.status) |
+        del(.spec.clusterIP) |
+        .metadata |= {
+          "name": "prometheus-federated-user-workload",
+          "namespace": $nm,
+          "annotations": {
+            "service.beta.openshift.io/serving-cert-secret-name":
+                "prometheus-federated-user-workload-tls",
+          },
+          "labels": {
+            "prometheus": "federated-user-workload"
+          }
+        } |
+        .spec.selector |= (
+          .app |= "federated-" + . |
+          .prometheus |= "federated-" + .
+        )
+    stdin: "{{ svc_prom.resources[0] | to_json }}"
+  register: svc_prom_json
+  changed_when: False
+
+# we need a prometheus with a modified kube-rbac-proxy container that allows
+# for /federate endpoint
+- name: Prepare federated prometheus deployment
+  command:
+    argv:
+      - jq
+      - >
+        del(.metadata.managedFields) |
+        del(.metadata.annotations) |
+        del(.metadata.ownerReferences) |
+        del(.metadata.resourceVersion) |
+        del(.metadata.selfLink) |
+        del(.metadata.generation) |
+        del(.metadata.creationTimestamp) |
+        del(.metadata.uid) |
+        del(.spec.template.spec.affinity) |
+        del(.status) |
+        .kind |= "Deployment" |
+        .metadata |= (
+          .name |= "prometheus-federated-user-workload" |
+          .labels.prometheus |= "federated-" + .
+        ) |
+        .spec |= (
+          .selector.matchLabels |= (
+            .app |= "federated-" + . |
+            .prometheus |= "federated-" + .
+          ) |
+          .selector.matchLabels as $labs |
+          .template |= (
+            .metadata.labels |= $labs |
+            .spec |= (
+              .volumes |= [.[] | if ((.secret.secretName // "")
+                    == "prometheus-user-workload-tls")
+                then
+                  (.secret.secretName |= "prometheus-federated-user-workload-tls")
+                else . end] |
+              .containers |= [.[] | if .name == "kube-rbac-proxy" then
+                  .args |= [.[] | select(test("--allow-paths") | not)]
+                else . end
+              ]
+            )
+          )
+        )
+    stdin: "{{ sts_prom.resources[0] | to_json }}"
+  register: deploy_prom_json
+  changed_when: False
+
+- name: Prepare user metrics collector pulling metrics out of the federated prometheus
+  command:
+    argv:
+      - jq
+      - --arg
+      - nm
+      - "{{ vars.user_workload_namespace }}"
+      - --argjson
+      - matchMetrics
+      - "{{ vars.match_user_metrics | to_json }}"
+      - >
+        def filterOutArgs: if (. | type) == "array" then
+            [.[] | select(test("^--(recordingrule|match)") | not)] + [
+              $matchMetrics[] | "--match={__name__=\"\(.)\"}"
+            ]
+          else . end;
+        del(.metadata.managedFields) |
+        del(.metadata.annotations) |
+        del(.metadata.ownerReferences) |
+        del(.metadata.resourceVersion) |
+        del(.metadata.selfLink) |
+        del(.metadata.generation) |
+        del(.metadata.creationTimestamp) |
+        del(.metadata.uid) |
+        del(.spec.template.spec.affinity) |
+        del(.status) |
+        .metadata.name |= "user-" + . |
+        .spec |= (
+          .selector.matchLabels |= (
+            .component |= "federated-" + .
+          ) |
+          .selector.matchLabels as $labs |
+          .template |= (
+            .metadata.labels |= $labs |
+            .spec |= (
+              .containers |= [.[] | if .name == "metrics-collector" then
+                  .command |= (. | filterOutArgs) |
+                  .args |= (. | filterOutArgs) |
+                  .env |= [.[] | if .name == "FROM" then
+                  .value |= ("https://"+ (["prometheus-federated-user-workload",
+                        "\($nm)", "svc:9091"] | join("."))
+                      )
+                    else . end
+                  ]
+                else . end
+              ]
+            )
+          )
+        )
+    stdin: "{{ deploy_collector.resources[0] | to_json }}"
+  register: deploy_user_collector
+  changed_when: False
+
+- name: Ensure federated prometheus service
+  k8s:
+    resource_definition: "{{ svc_prom_json.stdout | from_json }}"
+
+- name: Ensure federated prometheus deployment
+  k8s:
+    resource_definition: "{{ deploy_prom_json.stdout | from_json }}"
+
+- name: Grant user metrics collector read-only access to cluster
+  k8s:
+    resource_definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: user-metrics-collector-cluster-reader
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-reader
+      subjects:
+      - kind: ServiceAccount
+        name: endpoint-observability-operator-sa
+        namespace: open-cluster-management-addon-observability
+
+- name: Ensure user metrics collector
+  k8s:
+    resource_definition: "{{ deploy_user_collector.stdout | from_json }}"
+
