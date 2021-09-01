@@ -45,6 +45,74 @@ func matchProcess(p *procfs.Proc, pst *procfs.ProcStat, name string) (bool, erro
 	return false, nil
 }
 
+var (
+	// const
+	matchCmds = []string{"conmom", "curl"}
+)
+
+type zombieInfo struct {
+	cmd  string
+	pcmd string
+}
+type pidT uint64
+type pid2cmdT map[pidT]string
+
+func getZombieInfo(p *procfs.Proc, pst *procfs.ProcStat, pidCache *pid2cmdT) (zombieInfo, error) {
+	var err error
+	zi := zombieInfo{
+		cmd: "other",
+	}
+	for _, cmd := range matchCmds {
+		if b, _err := matchProcess(p, pst, cmd); _err != nil {
+			log.Printf("Failed to get cmdline info for a zombie PID=%d: %v\n", p.PID, err)
+			err = _err
+			break
+		} else if b {
+			zi.cmd = cmd
+			break
+		}
+	}
+	if cmd, ok := (*pidCache)[pidT(pst.PPID)]; ok {
+		zi.pcmd = cmd
+		return zi, err
+	}
+
+	var (
+		pp   procfs.Proc
+		ppst procfs.ProcStat
+	)
+	pp, err = procfs.NewProc(pst.PPID)
+	if err != nil {
+		log.Printf("Failed to get parent process info for pid=%d (ppid=%d): %v\n", p.PID, pst.PPID, err)
+		return zi, err
+	}
+	ppst, err = pp.Stat()
+	if err != nil {
+		log.Printf("Failed to get parent process stats for pid=%d (ppid=%d): %v\n", p.PID, pst.PPID, err)
+		return zi, err
+	}
+
+	if tmp, _err := pp.CmdLine(); _err == nil && len(tmp) > 0 && tmp[0] != "" {
+		zi.pcmd = tmp[0]
+		if i := strings.LastIndex(zi.pcmd, "/"); i >= 0 {
+			zi.pcmd = zi.pcmd[i+1:]
+		}
+	} else if err == nil && _err != nil {
+		err = _err
+	} else if err == nil && _err != nil {
+		err = _err
+	}
+	if zi.pcmd == "" {
+		if ppst.Comm != "" {
+			zi.pcmd = ppst.Comm
+		}
+	}
+	if zi.pcmd != "" {
+		(*pidCache)[pidT(ppst.PPID)] = zi.pcmd
+	}
+	return zi, err
+}
+
 func recordMetrics() {
 	var (
 		err         error
@@ -103,13 +171,15 @@ func recordMetrics() {
 	go func() {
 		for {
 			procs, err := procfs.AllProcs()
-			matchCmds := []string{"conmom", "curl"}
-			var counters = map[string]uint{}
 			if err != nil {
 				log.Printf("Failed to get processes: %v\n", err)
 				continue
 			}
 			evalFailed := 0
+
+			var zombieCounter = map[zombieInfo]uint{}
+			var pidCache = make(pid2cmdT)
+
 		procsLoop:
 			for _, p := range procs {
 				pst, err := p.Stat()
@@ -121,27 +191,22 @@ func recordMetrics() {
 				if pst.State != "Z" {
 					continue
 				}
-				other := true
-				for _, cmd := range matchCmds {
-					if b, err := matchProcess(&p, &pst, cmd); err != nil {
-						log.Printf("Failed to get cmdline info for a zombie PID=%d: %v\n", p.PID, err)
-						evalFailed++
-						continue procsLoop
-					} else if b {
-						counters[cmd]++
-						other = false
-						break
-					}
+				var zi zombieInfo
+				zi, err = getZombieInfo(&p, &pst, &pidCache)
+				if err != nil {
+					evalFailed++
+					continue procsLoop
 				}
-				if other {
-					counters["other"]++
-				}
+				zombieCounter[zi]++
 			}
 
-			for _, cmd := range matchCmds {
-				opsZombies.With(prometheus.Labels{"cmd": cmd}).Set(float64(counters[cmd]))
+			for zi, count := range zombieCounter {
+				opsZombies.With(prometheus.Labels{
+					"cmd":  zi.cmd,
+					"pcmd": zi.pcmd,
+				}).Set(float64(count))
 			}
-			opsZombies.With(prometheus.Labels{"cmd": "other"}).Set(float64(counters["other"]))
+
 			if evalFailed > 0 {
 				//log.Printf("Failed to evaluate %d processes!", evalFailed)
 				opsProcEvalFailed.Add(float64(evalFailed))
@@ -174,7 +239,7 @@ var (
 	opsZombies = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "node_zombies",
 		Help: "Number of zombie processes on the node.",
-	}, []string{"cmd"})
+	}, []string{"cmd", "pcmd"})
 	opsProcEvalFailed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "node_zombies_eval_failed",
 		Help: "Number of processes that failed to be evaluated.",
