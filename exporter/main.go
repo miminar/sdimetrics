@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,33 +17,34 @@ import (
 	"github.com/prometheus/procfs"
 )
 
-func matchProcess(p *procfs.Proc, pst *procfs.ProcStat, name string) (bool, error) {
+const (
+	unknownProcessCmd = "_unknown_"
+	defunctProcessCmd = "<defunct>"
+)
+
+func getProcessCmd(p *procfs.Proc, pst *procfs.ProcStat) (string, error) {
 	var (
-		tmp     string
+		cmd     = unknownProcessCmd
 		err     error
 		cmdline []string
 	)
-	if pst.Comm == name || strings.HasSuffix(pst.Comm, "/"+name) {
-		return true, nil
-	}
-	if tmp, err = p.Executable(); err != nil {
-		return false, err
-	}
-	if tmp == name || strings.HasSuffix(tmp, "/"+name) {
-		return true, nil
-	}
-	if cmdline, err = p.CmdLine(); err != nil {
-		return false, err
-	}
-	for i, tmp := range cmdline {
-		if i > 2 {
-			break
-		}
-		if tmp == name {
-			return true, nil
+	if cmdline, err = p.CmdLine(); err == nil {
+		if len(cmdline) > 0 && len(cmdline[0]) > 0 {
+			cmd = filepath.Base(cmdline[0])
 		}
 	}
-	return false, nil
+	if cmd != defunctProcessCmd && cmd != unknownProcessCmd {
+		return cmd, nil
+	}
+	if cmd, err = p.Executable(); err == nil {
+		if len(cmd) > 0 && cmd != defunctProcessCmd {
+			return filepath.Base(cmd), nil
+		}
+	}
+	if len(pst.Comm) > 0 && pst.Comm != defunctProcessCmd {
+		return filepath.Base(pst.Comm), nil
+	}
+	return cmd, nil
 }
 
 var (
@@ -59,18 +61,9 @@ type pid2cmdT map[pidT]string
 
 func getZombieInfo(p *procfs.Proc, pst *procfs.ProcStat, pidCache *pid2cmdT) (zombieInfo, error) {
 	var err error
-	zi := zombieInfo{
-		cmd: "other",
-	}
-	for _, cmd := range matchCmds {
-		if b, _err := matchProcess(p, pst, cmd); _err != nil {
-			log.Printf("Failed to get cmdline info for a zombie PID=%d: %v\n", p.PID, err)
-			err = _err
-			break
-		} else if b {
-			zi.cmd = cmd
-			break
-		}
+	zi := zombieInfo{}
+	if zi.cmd, err = getProcessCmd(p, pst); err != nil {
+		log.Printf("Failed to get cmdline info for a zombie PID=%d: %v\n", p.PID, err)
 	}
 	if cmd, ok := (*pidCache)[pidT(pst.PPID)]; ok {
 		zi.pcmd = cmd
@@ -92,22 +85,8 @@ func getZombieInfo(p *procfs.Proc, pst *procfs.ProcStat, pidCache *pid2cmdT) (zo
 		return zi, err
 	}
 
-	if tmp, _err := pp.CmdLine(); _err == nil && len(tmp) > 0 && tmp[0] != "" {
-		zi.pcmd = tmp[0]
-		if i := strings.LastIndex(zi.pcmd, "/"); i >= 0 {
-			zi.pcmd = zi.pcmd[i+1:]
-		}
-	} else if err == nil && _err != nil {
-		err = _err
-	} else if err == nil && _err != nil {
-		err = _err
-	}
-	if zi.pcmd == "" {
-		if ppst.Comm != "" {
-			zi.pcmd = ppst.Comm
-		}
-	}
-	if zi.pcmd != "" {
+	zi.pcmd, err = getProcessCmd(&pp, &ppst)
+	if len(zi.pcmd) > 0 && zi.pcmd != unknownProcessCmd {
 		(*pidCache)[pidT(ppst.PPID)] = zi.pcmd
 	}
 	return zi, err
