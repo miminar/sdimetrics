@@ -1,0 +1,51 @@
+---
+- name: Get current cluster monitoring config
+  k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    namespace: openshift-monitoring
+    name: cluster-monitoring-config
+  register: cm_cluster_monitoring_config
+
+- set_fact:
+    current_config: "{{ cm_cluster_monitoring_config.resources[0].data['config.yaml'] | default('') | from_yaml }}"
+
+- set_fact:
+    user_workload_enabled: "{{ current_config.enableUserWorkload | default(False) }}"
+
+- name: Enable user workload monitoring
+  block:
+    - set_fact:
+        new_config: "{{ current_config | combine({'enableUserWorkload': True}) }}"
+
+    - k8s:
+        api_version: v1
+        kind: ConfigMap
+        namespace: openshift-monitoring
+        name: cluster-monitoring-config
+        resource_definition:
+          data:
+            config.yaml: "{{ new_config | to_yaml }}"
+
+    - name: Wait for monitoring operator to run
+      k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: openshift-user-workload-monitoring
+        name: prometheus-operator
+        wait: true
+        wait_condition:
+          type: Available
+
+    - name: Wait for monitoring pods to run
+      k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: openshift-user-workload-monitoring
+        label_selectors:
+          - app in (prometheus, thanos-ruler)
+        wait: true
+        wait_condition:
+          type: Ready
+
+  when: not user_workload_enabled

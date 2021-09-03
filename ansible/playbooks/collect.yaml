@@ -3,4 +3,5 @@
   collections:
     - community.kubernetes
   roles:
+    - user-workload
     - collect
