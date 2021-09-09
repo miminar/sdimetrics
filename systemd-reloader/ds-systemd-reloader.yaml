@@ -30,13 +30,27 @@ spec:
               while true; do
                 printf 'Reloading systemd daemon ...\n'
                 chroot /host systemctl daemon-reload
-                printf 'systemd daemon reloaded\n'
+                sleep "$PAUSE_INTERVAL"
+                printf 'Resetting failed units ...\n'
+                chroot /host systemctl reset-failed
+                sleep "$PAUSE_INTERVAL"
+                printf 'Reloading crio ...\n'
+                chroot /host systemctl reload crio
+                sleep "$PAUSE_INTERVAL"
+                printf 'Restarting crio ...\n'
+                chroot /host systemctl restart crio
+                sleep "$PAUSE_INTERVAL"
+                printf 'Restarting kubelet ...\n'
+                chroot /host systemctl restart kubelet
+                printf 'Going to sleep for %s\n' "$SLEEP_INTERVAL"
                 sleep "$SLEEP_INTERVAL"
               done
           image: registry.access.redhat.com/ubi8:latest
           env:
             - name: SLEEP_INTERVAL
-              value: 24h
+              value: 23h
+            - name: PAUSE_INTERVAL
+              value: 10m
           imagePullPolicy: IfNotPresent
           name: reloader
           resources:
