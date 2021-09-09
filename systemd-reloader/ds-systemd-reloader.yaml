@@ -1,0 +1,76 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/name: systemd-reloader
+    app.kubernetes.io/version: v0.1
+  name: systemd-reloader
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: systemd-reloader
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: systemd-reloader
+        app.kubernetes.io/version: v0.1
+    spec:
+      containers:
+        - command:
+            - /usr/bin/env
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              if [[ "$(id -u)" != 0 ]]; then
+                printf 'This script must be run as root (uid=0), not uid=%d!\n' "$(id -u)" >&2
+                exit 1
+              fi
+              while true; do
+                printf 'Reloading systemd daemon ...\n'
+                chroot /host systemctl daemon-reload
+                printf 'systemd daemon reloaded\n'
+                sleep "$SLEEP_INTERVAL"
+              done
+          image: registry.access.redhat.com/ubi8:latest
+          env:
+            - name: SLEEP_INTERVAL
+              value: 24h
+          imagePullPolicy: IfNotPresent
+          name: reloader
+          resources:
+            requests:
+              cpu: 8m
+              memory: 50Mi
+            limits:
+              memory: 100Mi
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /host
+              mountPropagation: HostToContainer
+              name: root
+              readOnly: true
+      dnsPolicy: ClusterFirst
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: Always
+      serviceAccount: systemd-reloader
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - hostPath:
+            path: /
+            type: ""
+          name: root
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 50%
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: systemd-reloader
