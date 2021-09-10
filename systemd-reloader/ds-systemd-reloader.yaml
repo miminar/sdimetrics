@@ -34,14 +34,8 @@ spec:
                 printf 'Resetting failed units ...\n'
                 chroot /host systemctl reset-failed
                 sleep "$PAUSE_INTERVAL"
-                printf 'Reloading crio ...\n'
-                chroot /host systemctl reload crio
-                sleep "$PAUSE_INTERVAL"
                 printf 'Restarting crio ...\n'
                 chroot /host systemctl restart crio
-                sleep "$PAUSE_INTERVAL"
-                printf 'Restarting kubelet ...\n'
-                chroot /host systemctl restart kubelet
                 printf 'Going to sleep for %s\n' "$SLEEP_INTERVAL"
                 sleep "$SLEEP_INTERVAL"
               done
