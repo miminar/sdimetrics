@@ -1,0 +1,14 @@
+- name: Wait for monitoring pods to run
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: openshift-user-workload-monitoring
+    label_selectors:
+      - app in (prometheus, thanos-ruler)
+  register: dep_status
+  retries: 10
+  delay: 5
+  until: (dep_status.resources | length == 0) or (
+    (dep_status.resources | json_query("[].status.conditions[?type=='Ready'].status[]") |
+      map('bool') | unique) != [True])
+

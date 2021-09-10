@@ -1,0 +1,10 @@
+- name: Wait for monitoring operator to run
+  k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: openshift-user-workload-monitoring
+    name: prometheus-operator
+  register: dep_status
+  retries: 10
+  delay: 5
+  until: dep_status.resources[0] | json_query('status.conditions[?type==`Available`].status') != "True"

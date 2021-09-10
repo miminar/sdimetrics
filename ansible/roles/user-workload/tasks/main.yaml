@@ -27,25 +27,8 @@
           data:
             config.yaml: "{{ new_config | to_yaml }}"
 
-    - name: Wait for monitoring operator to run
-      k8s_info:
-        api_version: apps/v1
-        kind: Deployment
-        namespace: openshift-user-workload-monitoring
-        name: prometheus-operator
-        wait: true
-        wait_condition:
-          type: Available
+    - include_tasks: wait_for_monitoring_operator.yaml
 
-    - name: Wait for monitoring pods to run
-      k8s_info:
-        api_version: v1
-        kind: Pod
-        namespace: openshift-user-workload-monitoring
-        label_selectors:
-          - app in (prometheus, thanos-ruler)
-        wait: true
-        wait_condition:
-          type: Ready
+    - include_tasks: wait_for_monitoring_pods.yaml
 
   when: not user_workload_enabled
