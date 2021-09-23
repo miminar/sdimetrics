@@ -32,6 +32,7 @@
       - >
         del(.status) |
         del(.spec.clusterIP) |
+        del(.spec.clusterIPs) |
         .metadata |= {
           "name": "prometheus-federated-user-workload",
           "namespace": $nm,
@@ -153,14 +154,32 @@
 
 - name: Ensure federated prometheus service
   k8s:
+    apply: yes
     resource_definition: "{{ svc_prom_json.stdout | from_json }}"
 
-- name: Ensure federated prometheus deployment
-  k8s:
-    resource_definition: "{{ deploy_prom_json.stdout | from_json }}"
+- block:
+  - name: Ensure federated prometheus deployment
+    k8s:
+      apply: yes
+      resource_definition: "{{ deploy_prom_json.stdout | from_json }}"
+    register: creation
+
+  rescue:
+  - name: Delete federated prometheus deployment
+    k8s:
+      resource_definition: "{{ deploy_prom_json.stdout | from_json }}"
+      state: absent
+    register: creation
+    when: creation.error == 422
+
+  - name: Ensure federated prometheus deployment
+    k8s:
+      force: yes
+      resource_definition: "{{ deploy_prom_json.stdout | from_json }}"
 
 - name: Grant user metrics collector read-only access to cluster
   k8s:
+    apply: yes
     resource_definition:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
@@ -177,5 +196,5 @@
 
 - name: Ensure user metrics collector
   k8s:
+    apply: yes
     resource_definition: "{{ deploy_user_collector.stdout | from_json }}"
-
