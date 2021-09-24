@@ -15,7 +15,7 @@ Please find the most up to date information at [bz#1994444](https://bugzilla.red
 Usually, if acted upon early enough, the situation can be mitigated with the following sequence of commands executed on the affected node:
 
     # sudo su
-    # systemctl daemon-reaload
+    # systemctl daemon-reload
     # systemctl reset-failed
 
 However, if it is too late, the commands fail with a similar message:
@@ -37,3 +37,7 @@ As a `cluster-admin` run the following from your management host:
     # oc annotate namespace/systemd-reloader openshift.io/node-selector="cluster.ocs.openshift.io/openshift-storage="
     # oc apply -f https://raw.githubusercontent.com/miminar/sdimetrics/master/systemd-reloader/scc-privileged-rolebinding.yaml
     # oc apply -f https://raw.githubusercontent.com/miminar/sdimetrics/master/systemd-reloader/ds-systemd-reloader.yaml
+
+## Uninstallation
+
+    # oc delete project systemd-reloader
