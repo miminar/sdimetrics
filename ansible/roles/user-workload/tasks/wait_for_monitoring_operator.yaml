@@ -7,4 +7,4 @@
   register: dep_status
   retries: 10
   delay: 5
-  until: dep_status.resources[0] | json_query('status.conditions[?type==`Available`].status') != "True"
+  until: dep_status.resources[0] | default({}) | json_query('status.conditions[?type==`Available`].status') != "True"

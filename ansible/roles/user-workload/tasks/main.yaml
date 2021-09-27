@@ -8,7 +8,7 @@
   register: cm_cluster_monitoring_config
 
 - set_fact:
-    current_config: "{{ cm_cluster_monitoring_config.resources[0].data['config.yaml'] | default('') | from_yaml }}"
+    current_config: "{{ cm_cluster_monitoring_config.resources[0].data['config.yaml'] | default('---') | from_yaml }}"
 
 - set_fact:
     user_workload_enabled: "{{ current_config.enableUserWorkload | default(False) }}"
