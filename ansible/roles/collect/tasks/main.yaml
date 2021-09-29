@@ -44,10 +44,10 @@
             "prometheus": "federated-user-workload"
           }
         } |
-        .spec.selector |= (
-          .app |= "federated-" + . |
-          .prometheus |= "federated-" + .
-        )
+        .spec.selector |= {
+          "app": "federated-" + .app,
+          "prometheus": "federated-" + .prometheus,
+        }
     stdin: "{{ svc_prom.resources[0] | to_json }}"
   register: svc_prom_json
   changed_when: False
