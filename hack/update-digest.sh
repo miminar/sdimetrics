@@ -5,19 +5,23 @@ IFS=$'\n\t'
 
 root="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/..")"
 
-set -x
-
 tmpd="$(mktemp -d)"
 function cleanup() {
     rm -rf "$tmpd"
 }
 trap cleanup EXIT
 
-pushd "$tmpd"
-    csplit "$root/k8s/ds-node-exporter.yaml" '%^---$%1' '/^---$/' '{*}'
-    pullSpec=
-    dsFile=
-    for f in *; do
+# maps source file path to the result file path
+declare -A results=()
+
+function setImageDigestOnDs() {
+    local dsPath="$1"
+    csplit -f 'split-def' "$dsPath" '%^---$%1' '/^---$/' '{*}'
+    local pullSpec=
+    local dsFile=
+    local digest
+    ls -l 
+    for f in split-def*; do
         jq . <(yaml2json "$f") > "$f.json"
         if [[ -n "${pullSpec:-}" ]]; then
             continue
@@ -42,18 +46,32 @@ pushd "$tmpd"
         '.spec.template.spec.containers |= [.[] | .image |= $pullSpec]' \
         "$dsFile" | sponge "$dsFile"
 
+    local dst
+    dst="result-$(basename "$dsPath").yml"
     for f in *.json; do
-        printf -- '---\n' >>result.yaml
-        json2yaml "$f" >>result.yaml
+        printf -- '---\n'   >>"$dst"
+        json2yaml "$f"      >>"$dst"
+    done
+    results["$dsPath"]="$dst"
+    rm ./split-def* ||:
+}
+
+pushd "$tmpd"
+    for fn in "$root/k8s"/ds-*.yaml "$root/systemd-reloader"/ds-*.yaml; do
+        setImageDigestOnDs "$fn"
     done
 popd
 
+set -x
 git stash
     git checkout digest
         git fetch
         git rebase origin/master
-        cp "$tmpd/result.yaml" "$root/k8s/ds-node-exporter.yaml"
-        git commit -vasm 'updated digest for the node exporter'
+        for src in "${!results[@]}"; do
+            result="${results["$src"]}"
+            cp "$tmpd/$result" "$src"
+        done
+        git commit -vasm 'updated digests for the daemonset images'
         git push -f
     git checkout -
 git stash pop
