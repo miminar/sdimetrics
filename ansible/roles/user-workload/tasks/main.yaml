@@ -11,6 +11,10 @@
     current_config: "{{ cm_cluster_monitoring_config.resources[0].data['config.yaml'] | default('---') | from_yaml }}"
 
 - set_fact:
+    current_config: {}
+  when: current_config == ""
+
+- set_fact:
     user_workload_enabled: "{{ current_config.enableUserWorkload | default(False) }}"
 
 - name: Enable user workload monitoring
@@ -25,7 +29,7 @@
         name: cluster-monitoring-config
         resource_definition:
           data:
-            config.yaml: "{{ new_config | to_yaml }}"
+            config.yaml: "{{ new_config | to_nice_yaml }}"
 
     - include_tasks: wait_for_monitoring_operator.yaml
 
