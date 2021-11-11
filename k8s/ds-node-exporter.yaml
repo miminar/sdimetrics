@@ -17,37 +17,37 @@ spec:
         app.kubernetes.io/version: v0.1
     spec:
       containers:
-        - image: quay.io/miminar/sdimetrics@sha256:50fa42910a85033079399bb4dcd7bb91dad6ca07f94fb234196676b10ca1a6df
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 2112
-              name: metrics
-              protocol: TCP
-          livenessProbe:
-            tcpSocket:
-              port: 2112
-          readinessProbe:
-            tcpSocket:
-              port: 2112
-          name: node-exporter
-          resources:
-            requests:
-              cpu: 8m
-              memory: 180Mi
-            limits:
-              memory: 500Mi
-          securityContext:
-            privileged: true
-            runAsUser: 0
-          volumeMounts:
-            - mountPath: /host/proc
-              name: proc
-            - mountPath: /host/sys
-              name: sys
-            - mountPath: /host/root
-              mountPropagation: HostToContainer
-              name: root
-              readOnly: true
+      - image: quay.io/miminar/sdimetrics@sha256:b398ee78eebdce0f68f8dc470c6627223a891603270df9d125844c30f47b2b27
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          tcpSocket:
+            port: 2112
+        name: node-exporter
+        ports:
+        - containerPort: 2112
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: 2112
+        resources:
+          limits:
+            memory: 500Mi
+          requests:
+            cpu: 8m
+            memory: 180Mi
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /host/proc
+          name: proc
+        - mountPath: /host/sys
+          name: sys
+        - mountPath: /host/root
+          mountPropagation: HostToContainer
+          name: root
+          readOnly: true
       dnsPolicy: ClusterFirst
       hostPID: true
       nodeSelector:
@@ -56,18 +56,18 @@ spec:
       serviceAccount: sdimetrics-exporter
       terminationGracePeriodSeconds: 30
       volumes:
-        - hostPath:
-            path: /proc
-            type: ""
-          name: proc
-        - hostPath:
-            path: /sys
-            type: ""
-          name: sys
-        - hostPath:
-            path: /
-            type: ""
-          name: root
+      - hostPath:
+          path: /proc
+          type: ''
+        name: proc
+      - hostPath:
+          path: /sys
+          type: ''
+        name: sys
+      - hostPath:
+          path: /
+          type: ''
+        name: root
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 50%
@@ -88,10 +88,10 @@ metadata:
 spec:
   clusterIP: None
   ports:
-    - name: metrics
-      port: 2112
-      protocol: TCP
-      targetPort: metrics
+  - name: metrics
+    port: 2112
+    protocol: TCP
+    targetPort: metrics
   selector:
     app.kubernetes.io/name: sdimetrics-exporter
   sessionAffinity: None

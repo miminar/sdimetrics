@@ -17,50 +17,40 @@ spec:
         app.kubernetes.io/version: v0.1
     spec:
       containers:
-        - command:
-            - /usr/bin/env
-            - bash
-            - -c
-            - |
-              set -euo pipefail
-              if [[ "$(id -u)" != 0 ]]; then
-                printf 'This script must be run as root (uid=0), not uid=%d!\n' "$(id -u)" >&2
-                exit 1
-              fi
-              while true; do
-                printf 'Reloading systemd daemon ...\n'
-                chroot /host systemctl daemon-reload
-                sleep "$PAUSE_INTERVAL"
-                printf 'Resetting failed units ...\n'
-                chroot /host systemctl reset-failed
-                sleep "$PAUSE_INTERVAL"
-                printf 'Restarting crio ...\n'
-                chroot /host systemctl restart crio
-                printf 'Going to sleep for %s\n' "$SLEEP_INTERVAL"
-                sleep "$SLEEP_INTERVAL"
-              done
-          image: registry.access.redhat.com/ubi8:latest
-          env:
-            - name: SLEEP_INTERVAL
-              value: 23h
-            - name: PAUSE_INTERVAL
-              value: 10m
-          imagePullPolicy: IfNotPresent
-          name: reloader
-          resources:
-            requests:
-              cpu: 8m
-              memory: 50Mi
-            limits:
-              memory: 100Mi
-          securityContext:
-            privileged: true
-            runAsUser: 0
-          volumeMounts:
-            - mountPath: /host
-              mountPropagation: HostToContainer
-              name: root
-              readOnly: true
+      - command:
+        - /usr/bin/env
+        - bash
+        - -c
+        - "set -euo pipefail\nif [[ \"$(id -u)\" != 0 ]]; then\n  printf 'This script\
+          \ must be run as root (uid=0), not uid=%d!\\n' \"$(id -u)\" >&2\n  exit\
+          \ 1\nfi\nwhile true; do\n  printf 'Reloading systemd daemon ...\\n'\n  chroot\
+          \ /host systemctl daemon-reload\n  sleep \"$PAUSE_INTERVAL\"\n  printf 'Resetting\
+          \ failed units ...\\n'\n  chroot /host systemctl reset-failed\n  sleep \"\
+          $PAUSE_INTERVAL\"\n  printf 'Restarting crio ...\\n'\n  chroot /host systemctl\
+          \ restart crio\n  printf 'Going to sleep for %s\\n' \"$SLEEP_INTERVAL\"\n\
+          \  sleep \"$SLEEP_INTERVAL\"\ndone\n"
+        env:
+        - name: SLEEP_INTERVAL
+          value: 23h
+        - name: PAUSE_INTERVAL
+          value: 10m
+        image: registry.access.redhat.com/ubi8@sha256:060d7d6827b34949cc0fc58a50f72a5dccf00a4cc594406bdf5982f41dfe6118
+        imagePullPolicy: IfNotPresent
+        name: reloader
+        resources:
+          limits:
+            memory: 100Mi
+          requests:
+            cpu: 8m
+            memory: 50Mi
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /host
+          mountPropagation: HostToContainer
+          name: root
+          readOnly: true
       dnsPolicy: ClusterFirst
       hostPID: true
       nodeSelector:
@@ -69,10 +59,10 @@ spec:
       serviceAccount: systemd-reloader
       terminationGracePeriodSeconds: 30
       volumes:
-        - hostPath:
-            path: /
-            type: ""
-          name: root
+      - hostPath:
+          path: /
+          type: ''
+        name: root
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 50%
