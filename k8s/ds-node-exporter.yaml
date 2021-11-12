@@ -17,7 +17,7 @@ spec:
         app.kubernetes.io/version: v0.1
     spec:
       containers:
-      - image: quay.io/miminar/sdimetrics@sha256:b398ee78eebdce0f68f8dc470c6627223a891603270df9d125844c30f47b2b27
+      - image: quay.io/miminar/sdimetrics@sha256:fa002cc24bb4208d40d91dfc63efc6a6b050652895c7d5df93fe2fb8fcccf9a6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           tcpSocket:
