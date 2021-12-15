@@ -17,6 +17,8 @@ Usually, if acted upon early enough, the situation can be mitigated with the fol
     # sudo su
     # systemctl daemon-reload
     # systemctl reset-failed
+    # # does not affect running pods, it cleans up the zombies
+    # systemctl restart crio.service
 
 However, if it is too late, the commands fail with a similar message:
 
@@ -32,10 +34,12 @@ The daemonset shall be deployed only if the issue above is occuring on the clust
 
 As a `cluster-admin` run the following from your management host:
 
-    # oc new-project systemd-reloader
+    # nm=systemd-reloader
+    # oc new-project "$nm"
     # # optionally, restrict the daemonset to the nodes matching the selector; e.g. run only on OCS/ODF nodes
-    # oc annotate namespace/systemd-reloader openshift.io/node-selector="cluster.ocs.openshift.io/openshift-storage="
-    # oc apply -f https://raw.githubusercontent.com/miminar/sdimetrics/master/systemd-reloader/scc-privileged-rolebinding.yaml
+    # oc annotate namespace/"$nm" openshift.io/node-selector="cluster.ocs.openshift.io/openshift-storage="
+    # oc apply -f https://raw.githubusercontent.com/miminar/sdimetrics/master/systemd-reloader/sa-rolebindings.yaml
+    # oc adm policy add-cluster-role-to-user system:node-reader -z systemd-reloader
     # oc apply -f https://raw.githubusercontent.com/miminar/sdimetrics/master/systemd-reloader/ds-systemd-reloader.yaml
 
 ## Uninstallation

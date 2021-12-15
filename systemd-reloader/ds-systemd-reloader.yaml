@@ -1,4 +1,22 @@
 ---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: cli
+spec:
+  lookupPolicy:
+    local: true
+  tags:
+  - annotations: null
+    from:
+      kind: ImageStreamTag
+      name: cli:latest
+      namespace: openshift
+    importPolicy: {}
+    name: latest
+    referencePolicy:
+      type: Source
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -12,6 +30,8 @@ spec:
       app.kubernetes.io/name: systemd-reloader
   template:
     metadata:
+      annotations:
+        alpha.image.policy.openshift.io/resolve-names: '*'
       labels:
         app.kubernetes.io/name: systemd-reloader
         app.kubernetes.io/version: v0.1
@@ -27,6 +47,34 @@ spec:
                 printf 'This script must be run as root (uid=0), not uid=%d!\n' "$(id -u)" >&2
                 exit 1
               fi
+
+              nodeSelector="$(oc get -o go-template='{{range $k, $v := .spec.nodeSelector}}{{$k}}={{$v}},{{end}}' \
+                            pod "$POD_NAME" | sed 's/,$//')"
+              nodes="$(oc get nodes -l "${nodeSelector:-}" -o name | sed 's,.*/\([^/]\+\)$,\1,' | sort -u)"
+              if [[ -n "${nodes:-}" ]]; then
+                # Ensure each node executes the systemctl commands at a different time.
+                # Delay the initial execution of the commands by max 1/3 of $SLEEP_INTERVAL.
+                # The delay is determined by the position of the executing node in the sorted list of nodes.
+                # The 1st node in the list will have 0 delay.
+                num="$SLEEP_INTERVAL"
+                if [[ "$SLEEP_INTERVAL" =~ ([[:digit:].]+)([[:alpha:]]) ]]; then
+                  timeSuffix="${BASH_REMATCH[2]}"   # h, m or s for hours, minutes or seconds
+                  num="${BASH_REMATCH[1]}"
+                fi
+                INITIAL_SLEEP="$(awk '$1 == "'"$NODE_NAME"'" {
+                  maxDelay  = '"$num"'/3;
+                  nodeCount = '"$(wc -l <<<"$nodes")"';
+                  position  = NR - 1;   # node position in the list of nodes
+                  delay     = maxDelay * position / nodeCount;
+                  print delay"'"${timeSuffix:-}"'";
+                }' <<<"$nodes")"
+
+                printf 'Delaying the first execution by %s...\n' "$INITIAL_SLEEP"
+                sleep "$INITIAL_SLEEP"
+              else
+                printf 'Failed to list nodes!\n' >&2
+              fi
+
               while true; do
                 printf 'Reloading systemd daemon ...\n'
                 chroot /host systemctl daemon-reload
@@ -39,13 +87,23 @@ spec:
                 printf 'Going to sleep for %s\n' "$SLEEP_INTERVAL"
                 sleep "$SLEEP_INTERVAL"
               done
-          image: registry.access.redhat.com/ubi8:latest
+          image: cli:latest
           env:
             - name: SLEEP_INTERVAL
               value: 23h
             - name: PAUSE_INTERVAL
               value: 10m
-          imagePullPolicy: IfNotPresent
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          imagePullPolicy: Always
           name: reloader
           resources:
             requests:
@@ -77,8 +135,3 @@ spec:
     rollingUpdate:
       maxUnavailable: 50%
     type: RollingUpdate
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: systemd-reloader
